@@ -29,13 +29,19 @@ class IDOSAdapter:
 
         self._combination_id = comb_id
 
-    def post(self, endpoint: str, payload=None) -> dict:
+    def post(self, endpoint: str, payload: dict = None, additional_params: dict = None) -> dict:
         if payload is None:
             payload = {}
 
+        # HTTP parameters that the API accepts
+        params = {"userID": self.api_user_id,
+                  "userDesc": self.api_user_desc}
+
+        if additional_params is not None:
+            params.update(additional_params)
+
         req = requests.post(f"{self.url}/{self._combination_id}/{endpoint}",
-                            params={"userID": self.api_user_id,
-                                    "userDesc": self.api_user_desc},
+                            params=params,
                             json=payload,
                             headers={"Content-type": "text/json"})
 
@@ -44,7 +50,7 @@ class IDOSAdapter:
         else:
             raise Exception(req.text)
 
-    def find_connection_simple(self, station_from: str, station_to: str, via: str=None):
+    def find_connection_simple(self, station_from: str, station_to: str, via: str = None, count: int = 5):
         """
         TODO: Is Any any useful? The API allows and accepts list of from and to stations, but doesn't seem to
         do anything with it? At least not in find_connection_simple aka /connections/, I guess
@@ -52,8 +58,12 @@ class IDOSAdapter:
         :param station_to:
         :return:
         """
-        payload = {}
-        conn_params = {"prefereTrains": 1, "autoStrategy": True}
+        payload = {} # params that are accepted by the API as POST payload
+        params = {} # params that are accepted by the API as params
+
+        # Don't get confused by the word params.
+        # These are just parameters for the API, but are sent in the POST payload!
+        connection_params = {"prefereTrains": 1, "autoStrategy": True}
 
         if isinstance(station_from, str):
             payload["from"] = [ {"name": station_from} ]
@@ -64,13 +74,21 @@ class IDOSAdapter:
         if isinstance(via, str):
             payload["via"] = [ {"name": via} ]
 
-        payload["conn_params"] = conn_params
+        if isinstance(count, int):
+            params["maxCount"] = count
 
-        data = self.post("connections", payload=payload)
+        payload["conn_params"] = connection_params
+
+        data = self.post("connections", payload=payload, additional_params=params)
         connections = []
 
+        if data["fromObjects"][0].get("status") == 1:
+            raise Exception("'From' object not found.")
+
+        if data["toObjects"][0].get("status") == 1:
+            raise Exception("'To' object not found.")
+
         for i in data["connInfo"]["connections"]:
-            # print(i["trains"], end="\n\n")
             instance = Connection.from_dict(i)
             connections.append(instance)
 
